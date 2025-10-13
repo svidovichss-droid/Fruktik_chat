@@ -123,18 +123,23 @@
         
         <!-- Поле ввода -->
         <footer class="input-container">
-            <div class="flex space-x-3">
-                <input 
-                    type="text" 
-                    id="messageInput" 
-                    placeholder="Напиши сообщение Фруктику... 🍓" 
-                    class="flex-1 px-4 py-3 rounded-2xl border-2 border-pink-200 focus:border-pink-400 focus:ring-2 focus:ring-pink-200 outline-none transition-all bg-white text-gray-800"
-                    aria-label="Сообщение для Фруктика"
-                    maxlength="1000"
-                >
+            <div class="flex space-x-3 items-end">
+                <div class="flex-1 relative">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        placeholder="Напиши сообщение Фруктику... 🍓" 
+                        class="message-input-large w-full px-6 py-4 rounded-2xl border-3 border-pink-300 focus:border-pink-500 focus:ring-4 focus:ring-pink-200 outline-none transition-all bg-white text-gray-800 text-lg"
+                        aria-label="Сообщение для Фруктика"
+                        maxlength="1000"
+                    >
+                    <div class="input-character-count" id="charCount">
+                        0/1000
+                    </div>
+                </div>
                 <button 
                     id="sendButton"
-                    class="send-btn px-6 py-3 rounded-2xl text-white font-bold text-lg"
+                    class="send-btn-large px-8 py-4 rounded-2xl text-white font-bold text-lg transition-all duration-300"
                     aria-label="Отправить сообщение"
                 >
                     <i class="fas fa-paper-plane" aria-hidden="true"></i>
