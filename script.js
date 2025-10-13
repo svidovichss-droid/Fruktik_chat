@@ -113,8 +113,12 @@ function setupEventListeners() {
     const sidebarOverlay = document.getElementById('sidebarOverlay');
     const chatContainer = document.querySelector('.chat-container');
     
-    // Обработка ввода сообщения
-    messageInput.addEventListener('input', handleMessageInput);
+    // Обработка ввода сообщения с подсчетом символов
+    messageInput.addEventListener('input', function(e) {
+        handleMessageInput(e);
+        updateCharacterCount();
+    });
+    
     messageInput.addEventListener('keypress', handleMessageKeypress);
     messageInput.addEventListener('paste', handlePaste);
     
@@ -156,6 +160,20 @@ function setupEventListeners() {
     });
 }
 
+function updateCharacterCount() {
+    const messageInput = document.getElementById('messageInput');
+    const charCount = document.getElementById('charCount');
+    const count = messageInput.value.length;
+    
+    charCount.textContent = `${count}/${MAX_MESSAGE_LENGTH}`;
+    
+    if (count > MAX_MESSAGE_LENGTH * 0.9) {
+        charCount.classList.add('warning');
+    } else {
+        charCount.classList.remove('warning');
+    }
+}
+
 function setupAccessibility() {
     // Устанавливаем ARIA-атрибуты
     document.getElementById('messageInput').setAttribute('aria-label', 'Введите сообщение для Фруктика');
@@ -190,6 +208,7 @@ function handlePaste(e) {
         const trimmedText = pastedText.substring(0, MAX_MESSAGE_LENGTH);
         document.getElementById('messageInput').value = trimmedText;
         showStatus('Текст обрезан до допустимой длины', 'info');
+        updateCharacterCount();
     }
 }
 
@@ -615,6 +634,7 @@ async function sendMessage() {
     // Добавляем сообщение пользователя
     addMessageToChat('user', message);
     messageInput.value = '';
+    updateCharacterCount();
     
     // Сбрасываем состояние кнопки отправки
     const sendButtonInput = document.getElementById('sendButton');
@@ -758,12 +778,12 @@ function addMessageToChat(role, content, animate = true) {
     messageDiv.setAttribute('role', role === 'user' ? 'user-message' : 'assistant-message');
     
     const isUser = role === 'user';
-    const avatarEmoji = isUser ? '👤' : getRandomFruit();
-    const avatarBg = isUser ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'linear-gradient(135deg, #ff6b6b, #ffd93d)';
     
     messageDiv.innerHTML = `
         <div class="flex items-start ${isUser ? 'flex-row-reverse' : ''}">
-            <div class="fruit-avatar" style="background: ${avatarBg}" aria-hidden="true">${avatarEmoji}</div>
+            <div class="${isUser ? 'user-avatar blackberry-glow' : 'bot-avatar'}">
+                <span class="avatar-emoji">${isUser ? '🫐' : getRandomFruit()}</span>
+            </div>
             <div class="chat-bubble ${isUser ? 'user-bubble' : 'bot-bubble'}">
                 <div class="message-content">${escapeHtml(content)}</div>
                 <div class="message-time">${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
@@ -807,3 +827,8 @@ function installPWA() {
         });
     }
 }
+
+// Экспорт функций для глобального использования
+window.loadChat = loadChat;
+window.deleteChat = deleteChat;
+window.installPWA = installPWA;
