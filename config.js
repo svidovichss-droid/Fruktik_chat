@@ -3,7 +3,7 @@
 
 // Конфигурация API ключей
 window.API_KEYS = {
-    mistral: 'YOUR_API_KEY_HERE' // Замените на ваш реальный API ключ Mistral
+    mistral: '030Ujp7uvKCtTdrO8BreT1kj2vpFznGq' // Замените на ваш реальный API ключ Mistral
 };
 
 // Дополнительные настройки приложения
