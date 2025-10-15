@@ -24,6 +24,25 @@ body {
     position: relative;
 }
 
+/* Предотвращение автоматического вызова клавиатуры на мобильных устройствах */
+@media (max-width: 768px) {
+    body {
+        /* Предотвращает масштабирование при фокусе на инпуты */
+        touch-action: pan-y pinch-zoom;
+    }
+    
+    /* Отключает автоматический вызов клавиатуры при загрузке */
+    .message-input-large {
+        /* Убирает автофокус на мобильных устройствах */
+        caret-color: transparent;
+    }
+    
+    /* Включает клавиатуру только при явном тапе */
+    .message-input-large:focus {
+        caret-color: auto;
+    }
+}
+
 /* Контейнер чата */
 .chat-container {
     width: 100%;
