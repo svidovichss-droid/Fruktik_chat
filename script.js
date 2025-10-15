@@ -53,6 +53,19 @@ async function initializeApp() {
     
     // Инициализация PWA
     initializePWA();
+    
+    // На мобильных устройствах не фокусируемся автоматически на поле ввода
+    if (!isMobileDevice()) {
+        setTimeout(() => {
+            document.getElementById('messageInput').focus();
+        }, 500);
+    }
+}
+
+// Проверка мобильного устройства
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+           window.innerWidth <= 768;
 }
 
 async function loadConfig() {
@@ -123,6 +136,27 @@ function setupEventListeners() {
     messageInput.addEventListener('keypress', handleMessageKeypress);
     messageInput.addEventListener('paste', handlePaste);
     
+    // На мобильных устройствах фокусируемся только при явном тапе
+    if (isMobileDevice()) {
+        messageInput.addEventListener('touchstart', function(e) {
+            // Позволяем фокус только при прямом тапе на поле ввода
+            e.stopPropagation();
+        });
+        
+        // Предотвращаем автоматический фокус при клике на контейнер чата
+        chatContainer.addEventListener('touchstart', function(e) {
+            if (e.target !== messageInput && !messageInput.contains(e.target)) {
+                // Снимаем фокус с поля ввода, если тап не на нем
+                messageInput.blur();
+            }
+        });
+    } else {
+        // На десктопе сохраняем старое поведение
+        chatContainer.addEventListener('click', function() {
+            messageInput.focus();
+        });
+    }
+    
     // Кнопки
     sendButton.addEventListener('click', sendMessage);
     newChatButton.addEventListener('click', createNewChat);
@@ -135,11 +169,6 @@ function setupEventListeners() {
     
     sidebarOverlay.addEventListener('click', function(e) {
         closeSidebarFunction();
-    });
-    
-    // Автофокус на поле ввода
-    chatContainer.addEventListener('click', function() {
-        messageInput.focus();
     });
     
     // Закрытие боковой панели при нажатии Escape
@@ -240,136 +269,421 @@ function setupSwipeGestures() {
         
         const diffX = currentX - startX;
         
-        // Если свайп достаточно длинный - открываем панель, иначе закрываем
-        if (diffX > SWIPE_THRESHOLD && startX <= SIDEBAR_SWIPE_AREA) {
+        // Если свайп достаточно длинный, открываем панель
+        if (swipeDistance > SWIPE_THRESHOLD && diffX > 0) {
             openSidebar();
         } else {
-            // Плавное закрытие
-            sidebar.style.transform = 'translateX(-100%)';
-            sidebar.style.opacity = '0';
-            
-            const overlay = document.getElementById('sidebarOverlay');
-            overlay.style.opacity = '0';
-            setTimeout(() => {
-                if (!sidebar.classList.contains('active')) {
-                    overlay.style.display = 'none';
-                }
-            }, 300);
-        }
-    });
-    
-    // Закрытие боковой панели свайпом влево
-    sidebar.addEventListener('touchstart', function(e) {
-        if (!sidebar.classList.contains('active')) return;
-        startX = e.touches[0].clientX;
-        isSwiping = true;
-        sidebar.style.transition = 'none';
-        sidebar.classList.add('swiping');
-    });
-    
-    sidebar.addEventListener('touchmove', function(e) {
-        if (!isSwiping || !sidebar.classList.contains('active')) return;
-        
-        const currentX = e.touches[0].clientX;
-        const diffX = currentX - startX;
-        
-        // Свайп влево для закрытия
-        if (diffX < 0) {
-            e.preventDefault();
-            const progress = Math.min(Math.abs(diffX) / 100, 1);
-            sidebar.style.transform = `translateX(${-progress * 100}%)`;
-        }
-    });
-    
-    sidebar.addEventListener('touchend', function(e) {
-        if (!isSwiping) return;
-        isSwiping = false;
-        sidebar.classList.remove('swiping');
-        sidebar.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
-        
-        const diffX = currentX - startX;
-        
-        // Если свайп влево достаточно сильный - закрываем
-        if (diffX < -SWIPE_THRESHOLD) {
+            // Иначе закрываем
             closeSidebarFunction();
-        } else {
-            // Иначе возвращаем панель
-            sidebar.style.transform = 'translateX(0)';
         }
     });
+}
+
+function setupAccessibility() {
+    // Добавляем ARIA атрибуты для улучшения доступности
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    
+    messageInput.setAttribute('aria-label', 'Введите ваше сообщение');
+    sendButton.setAttribute('aria-label', 'Отправить сообщение');
+    
+    // Управление с клавиатуры
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'k') {
+            e.preventDefault();
+            messageInput.focus();
+        }
+    });
+}
+
+function handleMessageInput(e) {
+    const messageInput = document.getElementById('messageInput');
+    
+    // Автоматическое увеличение высоты текстового поля
+    messageInput.style.height = 'auto';
+    messageInput.style.height = Math.min(messageInput.scrollHeight, 200) + 'px';
+    
+    // Обновление состояния кнопки отправки
+    const sendButton = document.getElementById('sendButton');
+    const hasText = messageInput.value.trim().length > 0;
+    const isValidLength = messageInput.value.length <= MAX_MESSAGE_LENGTH;
+    
+    sendButton.disabled = !hasText || !isValidLength || isSending;
 }
 
 function updateCharacterCount() {
     const messageInput = document.getElementById('messageInput');
-    const charCount = document.getElementById('charCount');
-    const count = messageInput.value.length;
+    const characterCount = document.getElementById('characterCount');
+    const currentLength = messageInput.value.length;
     
-    charCount.textContent = `${count}/${MAX_MESSAGE_LENGTH}`;
+    characterCount.textContent = `${currentLength}/${MAX_MESSAGE_LENGTH}`;
     
-    if (count > MAX_MESSAGE_LENGTH * 0.9) {
-        charCount.classList.add('warning');
+    if (currentLength > MAX_MESSAGE_LENGTH * 0.9) {
+        characterCount.classList.add('warning');
     } else {
-        charCount.classList.remove('warning');
+        characterCount.classList.remove('warning');
     }
 }
 
-function setupAccessibility() {
-    // Устанавливаем ARIA-атрибуты
-    document.getElementById('messageInput').setAttribute('aria-label', 'Введите сообщение для Фруктика');
-    document.getElementById('sendButton').setAttribute('aria-label', 'Отправить сообщение');
-}
-
-function handleMessageInput(e) {
-    const message = e.target.value.trim();
-    const sendButton = document.getElementById('sendButton');
-    
-    // Активируем/деактивируем кнопку отправки
-    sendButton.disabled = !message || message.length === 0;
-}
-
-function handleMessageKeypress(event) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        
-        // Проверяем, не пустое ли сообщение
-        const message = document.getElementById('messageInput').value.trim();
-        if (message && !isSending) {
-            sendMessage();
-        }
+function handleMessageKeypress(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
     }
 }
 
 function handlePaste(e) {
-    // Обработка вставки текста - обрезаем если слишком длинный
-    const pastedText = e.clipboardData.getData('text');
-    if (pastedText.length > MAX_MESSAGE_LENGTH) {
-        e.preventDefault();
-        const trimmedText = pastedText.substring(0, MAX_MESSAGE_LENGTH);
-        document.getElementById('messageInput').value = trimmedText;
-        showStatus('Текст обрезан до допустимой длины', 'info');
+    // Обработка вставки текста с автоматической обрезкой
+    setTimeout(() => {
+        const messageInput = document.getElementById('messageInput');
+        if (messageInput.value.length > MAX_MESSAGE_LENGTH) {
+            messageInput.value = messageInput.value.substring(0, MAX_MESSAGE_LENGTH);
+            showStatus(`Сообщение обрезано до ${MAX_MESSAGE_LENGTH} символов`, 'warning');
+        }
         updateCharacterCount();
+        handleMessageInput();
+    }, 0);
+}
+
+async function sendMessage() {
+    if (isSending) return;
+    
+    const messageInput = document.getElementById('messageInput');
+    const message = messageInput.value.trim();
+    
+    if (!message) return;
+    if (message.length > MAX_MESSAGE_LENGTH) {
+        showStatus(`Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`, 'error');
+        return;
+    }
+    
+    // Проверяем API ключ
+    if (!API_CONFIG.key) {
+        showStatus('API ключ не настроен. Проверьте конфигурацию.', 'error');
+        return;
+    }
+    
+    isSending = true;
+    updateSendButtonState();
+    
+    try {
+        // Создаем новый чат, если его нет
+        if (!currentChatId) {
+            createNewChat();
+        }
+        
+        // Добавляем сообщение пользователя
+        addMessageToChat(message, 'user');
+        
+        // Очищаем поле ввода
+        messageInput.value = '';
+        updateCharacterCount();
+        handleMessageInput();
+        
+        // Показываем индикатор набора
+        showTypingIndicator();
+        
+        // Получаем ответ от Mistral AI
+        const response = await getMistralResponse(message);
+        
+        // Убираем индикатор набора
+        hideTypingIndicator();
+        
+        // Добавляем ответ бота
+        addMessageToChat(response, 'bot');
+        
+        // Сохраняем чаты
+        saveChats();
+        
+    } catch (error) {
+        console.error('Ошибка отправки сообщения:', error);
+        hideTypingIndicator();
+        
+        let errorMessage = 'Произошла ошибка при отправке сообщения';
+        if (error.message.includes('API key')) {
+            errorMessage = 'Ошибка API ключа. Проверьте конфигурацию.';
+        } else if (error.message.includes('network') || error.message.includes('Network')) {
+            errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
+        } else if (error.message.includes('rate limit')) {
+            errorMessage = 'Превышен лимит запросов. Попробуйте позже.';
+        }
+        
+        showStatus(errorMessage, 'error');
+        addMessageToChat(errorMessage, 'bot');
+    } finally {
+        isSending = false;
+        updateSendButtonState();
     }
 }
 
-// Функции для работы с боковой панелью
+async function getMistralResponse(userMessage) {
+    const currentChat = chats.find(chat => chat.id === currentChatId);
+    if (!currentChat) throw new Error('Чат не найден');
+    
+    // Формируем историю сообщений для контекста
+    const messages = currentChat.messages
+        .filter(msg => msg.content && msg.content.trim())
+        .slice(-10) // Берем последние 10 сообщений для контекста
+        .map(msg => ({
+            role: msg.type === 'user' ? 'user' : 'assistant',
+            content: msg.content
+        }));
+    
+    // Добавляем текущее сообщение пользователя
+    messages.push({
+        role: 'user',
+        content: userMessage
+    });
+    
+    const requestBody = {
+        model: MODEL,
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 1000,
+        top_p: 1,
+        stream: false
+    };
+    
+    const response = await fetch(API_CONFIG.url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${API_CONFIG.key}`
+        },
+        body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        
+        try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.error && errorData.error.message) {
+                errorMessage = errorData.error.message;
+            }
+        } catch (e) {
+            errorMessage = errorText || errorMessage;
+        }
+        
+        throw new Error(errorMessage);
+    }
+    
+    const data = await response.json();
+    
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+        return data.choices[0].message.content.trim();
+    } else {
+        throw new Error('Неверный формат ответа от API');
+    }
+}
+
+function addMessageToChat(content, type) {
+    if (!currentChatId) return;
+    
+    const currentChat = chats.find(chat => chat.id === currentChatId);
+    if (!currentChat) return;
+    
+    const message = {
+        id: Date.now() + Math.random(),
+        type: type,
+        content: content,
+        timestamp: new Date().toISOString()
+    };
+    
+    currentChat.messages.push(message);
+    currentChat.lastActivity = message.timestamp;
+    
+    // Обновляем превью чата
+    if (type === 'user') {
+        currentChat.preview = content.length > 50 ? content.substring(0, 50) + '...' : content;
+    }
+    
+    displayMessage(message);
+    saveChats();
+    updateChatsList();
+}
+
+function displayMessage(message) {
+    const messagesContainer = document.getElementById('messagesContainer');
+    const emptyChat = document.getElementById('emptyChat');
+    
+    // Скрываем сообщение о пустом чате
+    if (emptyChat) {
+        emptyChat.style.display = 'none';
+    }
+    
+    const messageElement = createMessageElement(message);
+    messagesContainer.appendChild(messageElement);
+    
+    // Прокручиваем к последнему сообщению
+    scrollToBottom();
+    
+    // Анимация появления
+    setTimeout(() => {
+        messageElement.classList.add('message-enter');
+    }, 50);
+}
+
+function createMessageElement(message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${message.type}-message`;
+    
+    const isUser = message.type === 'user';
+    const avatarEmoji = isUser ? '🫐' : '🤖'; // Ежевика для пользователя
+    
+    messageDiv.innerHTML = `
+        <div style="display: flex; align-items: flex-start; justify-content: ${isUser ? 'flex-end' : 'flex-start'}; margin-bottom: 1rem;">
+            ${!isUser ? `
+                <div class="bot-avatar">
+                    <span class="avatar-emoji">${avatarEmoji}</span>
+                </div>
+            ` : ''}
+            
+            <div class="chat-bubble ${isUser ? 'user-bubble' : 'bot-bubble'}" style="order: ${isUser ? '1' : '2'};">
+                <div class="message-content">${formatMessageContent(message.content)}</div>
+                <div class="message-time">${formatTime(message.timestamp)}</div>
+            </div>
+            
+            ${isUser ? `
+                <div class="user-avatar">
+                    <span class="avatar-emoji blackberry-glow">${avatarEmoji}</span>
+                </div>
+            ` : ''}
+        </div>
+    `;
+    
+    return messageDiv;
+}
+
+function formatMessageContent(content) {
+    // Заменяем переносы строк на <br> и экранируем HTML
+    return content
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>');
+}
+
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('ru-RU', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+}
+
+function showTypingIndicator() {
+    const messagesContainer = document.getElementById('messagesContainer');
+    
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'message bot-message';
+    typingDiv.id = 'typingIndicator';
+    
+    typingDiv.innerHTML = `
+        <div style="display: flex; align-items: flex-start; margin-bottom: 1rem;">
+            <div class="bot-avatar">
+                <span class="avatar-emoji">🤖</span>
+            </div>
+            <div class="chat-bubble bot-bubble">
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(typingDiv);
+    scrollToBottom();
+}
+
+function hideTypingIndicator() {
+    const typingIndicator = document.getElementById('typingIndicator');
+    if (typingIndicator) {
+        typingIndicator.remove();
+    }
+}
+
+function scrollToBottom() {
+    const messagesContainer = document.getElementById('messagesContainer');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function updateSendButtonState() {
+    const sendButton = document.getElementById('sendButton');
+    const messageInput = document.getElementById('messageInput');
+    
+    if (isSending) {
+        sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        sendButton.disabled = true;
+    } else {
+        sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
+        const hasText = messageInput.value.trim().length > 0;
+        const isValidLength = messageInput.value.length <= MAX_MESSAGE_LENGTH;
+        sendButton.disabled = !hasText || !isValidLength;
+    }
+}
+
+function createNewChat() {
+    // Ограничиваем количество чатов
+    if (chats.length >= MAX_CHATS) {
+        showStatus(`Максимальное количество чатов: ${MAX_CHATS}`, 'warning');
+        return;
+    }
+    
+    const newChat = {
+        id: 'chat_' + Date.now(),
+        title: `Чат ${chats.length + 1}`,
+        preview: 'Новый чат...',
+        messages: [],
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString()
+    };
+    
+    chats.unshift(newChat);
+    currentChatId = newChat.id;
+    
+    // Очищаем контейнер сообщений
+    const messagesContainer = document.getElementById('messagesContainer');
+    messagesContainer.innerHTML = `
+        <div id="emptyChat" class="empty-chat">
+            <div class="empty-chat-icon">🫐</div>
+            <h3>Добро пожаловать в FruityChat!</h3>
+            <p>Начните общение с ИИ, отправив сообщение ниже.</p>
+        </div>
+    `;
+    
+    saveChats();
+    updateChatsList();
+    closeSidebarFunction();
+    
+    showStatus('Новый чат создан!', 'success');
+    
+    // Фокусируемся на поле ввода (только на десктопе)
+    if (!isMobileDevice()) {
+        setTimeout(() => {
+            document.getElementById('messageInput').focus();
+        }, 300);
+    }
+}
+
 function openSidebar() {
     const sidebar = document.getElementById('chatsSidebar');
     const overlay = document.getElementById('sidebarOverlay');
     
     sidebar.classList.add('active');
-    sidebar.setAttribute('aria-hidden', 'false');
-    sidebar.style.transform = 'translateX(0)';
-    sidebar.style.opacity = '1';
-    
+    overlay.classList.add('active');
     overlay.style.display = 'block';
-    setTimeout(() => {
-        overlay.classList.add('active');
-    }, 10);
     
-    // Блокируем скролл основного контента
+    // Обновляем список чатов при открытии
+    updateChatsList();
+    
+    // Предотвращаем скролл основного контента
     document.body.style.overflow = 'hidden';
-    
-    renderChatsList();
 }
 
 function closeSidebarFunction() {
@@ -377,329 +691,142 @@ function closeSidebarFunction() {
     const overlay = document.getElementById('sidebarOverlay');
     
     sidebar.classList.remove('active');
-    sidebar.setAttribute('aria-hidden', 'true');
-    sidebar.style.transform = 'translateX(-100%)';
-    
     overlay.classList.remove('active');
+    
     setTimeout(() => {
         overlay.style.display = 'none';
+        document.body.style.overflow = '';
     }, 300);
-    
-    // Разблокируем скролл
-    document.body.style.overflow = '';
-    
-    // Фокус на поле ввода после закрытия
-    setTimeout(() => {
-        document.getElementById('messageInput').focus();
-    }, 350);
 }
 
-// Функции для работы с чатами
-function loadChats() {
-    try {
-        const savedChats = localStorage.getItem('fruitChats');
-        if (savedChats) {
-            chats = JSON.parse(savedChats);
-            
-            if (chats.length > 0) {
-                // Загружаем последний активный чат или самый новый
-                const lastActiveChat = chats.find(chat => chat.id === currentChatId) || chats[chats.length - 1];
-                currentChatId = lastActiveChat.id;
-                loadChat(currentChatId);
-            } else {
-                createNewChat();
-            }
-        } else {
-            createNewChat();
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки чатов:', error);
-        showStatus('Ошибка загрузки чатов', 'error');
-        createNewChat();
+function updateChatsList() {
+    const chatsList = document.getElementById('chatsList');
+    if (!chatsList) return;
+    
+    chatsList.innerHTML = '';
+    
+    if (chats.length === 0) {
+        chatsList.innerHTML = `
+            <div class="sidebar-info">
+                <p>Чатов пока нет. Создайте новый чат!</p>
+            </div>
+        `;
+        return;
     }
-}
-
-function saveChats() {
-    try {
-        // Ограничиваем количество чатов
-        if (chats.length > MAX_CHATS) {
-            const chatsToRemove = chats.length - MAX_CHATS;
-            chats = chats.slice(chatsToRemove);
-            showStatus(`Удалены старые чаты (сохранено ${MAX_CHATS})`, 'info');
-        }
+    
+    chats.forEach(chat => {
+        const chatElement = document.createElement('div');
+        chatElement.className = `chat-item ${chat.id === currentChatId ? 'active' : ''}`;
         
-        localStorage.setItem('fruitChats', JSON.stringify(chats));
-    } catch (error) {
-        console.error('Ошибка сохранения чатов:', error);
-        showStatus('Ошибка сохранения чатов', 'error');
-    }
+        chatElement.innerHTML = `
+            <div class="chat-item-content" onclick="switchToChat('${chat.id}')">
+                <div class="chat-header">
+                    <div class="chat-title">${escapeHtml(chat.title)}</div>
+                    <div class="chat-date">${formatDate(chat.lastActivity)}</div>
+                </div>
+                <div class="chat-preview">${escapeHtml(chat.preview)}</div>
+            </div>
+            <button class="delete-chat-btn" onclick="deleteChat('${chat.id}', event)">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        
+        chatsList.appendChild(chatElement);
+    });
 }
 
-function createNewChat() {
-    const newChat = {
-        id: generateChatId(),
-        title: 'Новый чат',
-        messages: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-    };
+function switchToChat(chatId) {
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) return;
     
-    chats.push(newChat);
-    currentChatId = newChat.id;
-    saveChats();
-    renderChat();
-    renderChatsList();
-    closeSidebarFunction();
-    
-    // Фокус на поле ввода
-    const messageInput = document.getElementById('messageInput');
-    messageInput.focus();
-    
-    showStatus('Новый чат создан!', 'success');
-}
-
-function generateChatId() {
-    return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function loadChat(chatId) {
     currentChatId = chatId;
-    renderChat();
+    
+    // Обновляем контейнер сообщений
+    const messagesContainer = document.getElementById('messagesContainer');
+    messagesContainer.innerHTML = '';
+    
+    if (chat.messages.length === 0) {
+        messagesContainer.innerHTML = `
+            <div id="emptyChat" class="empty-chat">
+                <div class="empty-chat-icon">🫐</div>
+                <h3>Начните общение!</h3>
+                <p>Этот чат пока пуст. Отправьте первое сообщение.</p>
+            </div>
+        `;
+    } else {
+        chat.messages.forEach(message => {
+            displayMessage(message);
+        });
+    }
+    
     closeSidebarFunction();
+    updateChatsList();
     
-    // Фокус на поле ввода
-    document.getElementById('messageInput').focus();
-    
-    showStatus('Чат загружен', 'success');
+    showStatus(`Переключен на чат: ${chat.title}`, 'info');
 }
 
 function deleteChat(chatId, event) {
     if (event) {
-        event.preventDefault();
         event.stopPropagation();
     }
     
     if (chats.length <= 1) {
-        showStatus('Нельзя удалить единственный чат!', 'error');
+        showStatus('Нельзя удалить последний чат', 'warning');
         return;
     }
     
-    // Используем более красивое подтверждение
-    if (window.confirm('Вы уверены, что хотите удалить этот чат? Все сообщения будут потеряны.')) {
-        const chatIndex = chats.findIndex(chat => chat.id === chatId);
-        const chatToDelete = chats[chatIndex];
-        
-        chats = chats.filter(chat => chat.id !== chatId);
-        
+    const chatIndex = chats.findIndex(chat => chat.id === chatId);
+    if (chatIndex === -1) return;
+    
+    const chatToDelete = chats[chatIndex];
+    
+    if (confirm(`Удалить чат "${chatToDelete.title}"?`)) {
+        // Если удаляем текущий чат, переключаемся на другой
         if (currentChatId === chatId) {
-            // Переключаемся на соседний чат
-            const newIndex = chatIndex >= chats.length ? chats.length - 1 : chatIndex;
-            currentChatId = chats.length > 0 ? chats[newIndex].id : null;
+            const newCurrentChat = chats.find(chat => chat.id !== chatId);
+            currentChatId = newCurrentChat ? newCurrentChat.id : null;
+        }
+        
+        // Удаляем чат
+        chats.splice(chatIndex, 1);
+        
+        // Если это был последний чат, создаем новый
+        if (chats.length === 0) {
+            createNewChat();
+        } else if (currentChatId === null) {
+            currentChatId = chats[0].id;
         }
         
         saveChats();
-        renderChat();
-        renderChatsList();
-        showStatus('Чат удален!', 'success');
+        updateChatsList();
+        
+        // Обновляем отображение сообщений
+        if (currentChatId) {
+            switchToChat(currentChatId);
+        }
+        
+        showStatus('Чат удален', 'success');
     }
 }
 
-function updateChatTitle(chatId, newTitle) {
-    const chat = chats.find(c => c.id === chatId);
-    if (chat && chat.title !== newTitle) {
-        chat.title = newTitle.substring(0, 50); // Ограничиваем длину заголовка
-        chat.updatedAt = new Date().toISOString();
-        saveChats();
-        renderChatsList();
-    }
-}
-
-function renderChatsList() {
-    const chatsList = document.getElementById('chatsList');
-    
-    if (chats.length === 0) {
-        chatsList.innerHTML = '<div class="text-center text-gray-500 py-8"><i class="fas fa-comments text-2xl mb-2"></i><p>Нет сохраненных чатов</p></div>';
-        return;
-    }
-    
-    // Сортируем чаты по дате обновления (новые сверху)
-    const sortedChats = [...chats].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    
-    chatsList.innerHTML = sortedChats.map(chat => `
-        <div class="chat-item ${chat.id === currentChatId ? 'active' : ''}" role="listitem">
-            <div class="chat-item-content" onclick="loadChat('${chat.id}')" role="button" tabindex="0" onkeypress="if(event.key==='Enter') loadChat('${chat.id}')">
-                <div class="chat-header">
-                    <div class="chat-title">${escapeHtml(chat.title)}</div>
-                    <div class="chat-date">${formatDate(chat.updatedAt)}</div>
-                </div>
-                <div class="chat-preview">${getChatPreview(chat)}</div>
-            </div>
-            <button class="delete-chat-btn" onclick="deleteChat('${chat.id}', event)" aria-label="Удалить чат">
-                <i class="fas fa-trash" aria-hidden="true"></i>
-            </button>
-        </div>
-    `).join('');
-}
-
-function getChatPreview(chat) {
-    if (chat.messages.length === 0) return 'Пока нет сообщений';
-    
-    const lastMessage = chat.messages[chat.messages.length - 1];
-    const content = lastMessage.content.substring(0, 30);
-    return lastMessage.role === 'user' ? `Вы: ${content}...` : `Фруктик: ${content}...`;
-}
-
-function formatDate(dateString) {
-    const date = new Date(dateString);
+function formatDate(timestamp) {
+    const date = new Date(timestamp);
     const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffMins < 1) {
-        return 'Только что';
-    } else if (diffMins < 60) {
-        return `${diffMins} мин назад`;
-    } else if (diffHours < 24) {
-        return `${diffHours} ч назад`;
+    if (diffDays === 0) {
+        return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     } else if (diffDays === 1) {
         return 'Вчера';
     } else if (diffDays < 7) {
-        return `${diffDays} дн назад`;
+        return date.toLocaleDateString('ru-RU', { weekday: 'short' });
     } else {
-        return date.toLocaleDateString('ru-RU');
+        return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     }
 }
 
-function renderChat() {
-    const chatMessages = document.getElementById('chatMessages');
-    
-    if (!currentChatId || chats.length === 0) {
-        chatMessages.innerHTML = getEmptyChatHTML();
-        return;
-    }
-    
-    const currentChat = chats.find(chat => chat.id === currentChatId);
-    if (!currentChat) {
-        chatMessages.innerHTML = getEmptyChatHTML();
-        return;
-    }
-    
-    chatMessages.innerHTML = '';
-    
-    if (currentChat.messages.length === 0) {
-        chatMessages.innerHTML = getEmptyChatHTML();
-        return;
-    }
-    
-    currentChat.messages.forEach(message => {
-        addMessageToChat(message.role, message.content, false);
-    });
-    
-    scrollToBottom();
-}
-
-function getEmptyChatHTML() {
-    return `
-        <div class="empty-chat" id="emptyChat">
-            <div class="empty-chat-icon">🍓</div>
-            <h2 class="text-2xl font-bold mb-2">Начни новый разговор!</h2>
-            <p class="text-lg">Напиши что-нибудь Фруктику, чтобы начать общение.</p>
-            <div class="mt-4 text-sm text-gray-600">
-                <p>✨ Фруктик поможет с:</p>
-                <ul class="list-disc list-inside mt-2 text-left">
-                    <li>Домашними заданиями</li>
-                    <li>Объяснением сложных тем</li>
-                    <li>Подготовкой к урокам</li>
-                </ul>
-            </div>
-        </div>
-    `;
-}
-
-// Создаем фруктовый дождь
-function createFruitRain() {
-    const rainContainer = document.getElementById('fruitRain');
-    
-    // Очищаем контейнер перед созданием новых фруктов
-    rainContainer.innerHTML = '';
-    
-    const fruitCount = window.innerWidth < 768 ? 10 : 20;
-    
-    for (let i = 0; i < fruitCount; i++) {
-        setTimeout(() => {
-            const fruit = document.createElement('div');
-            fruit.className = 'fruit';
-            fruit.textContent = getRandomFruit();
-            fruit.style.left = Math.random() * 100 + 'vw';
-            fruit.style.animationDuration = (Math.random() * 5 + 3) + 's';
-            fruit.style.animationDelay = Math.random() * 2 + 's';
-            fruit.style.opacity = Math.random() * 0.4 + 0.2;
-            fruit.style.fontSize = (Math.random() * 10 + 20) + 'px';
-            fruit.style.zIndex = '-1';
-            rainContainer.appendChild(fruit);
-            
-            // Удаляем фрукт после завершения анимации
-            setTimeout(() => {
-                if (fruit.parentNode === rainContainer) {
-                    rainContainer.removeChild(fruit);
-                }
-            }, parseFloat(fruit.style.animationDuration) * 1000 + 1000);
-        }, i * 200);
-    }
-}
-
-// Показ статусного сообщения
-function showStatus(message, type = 'info') {
-    const statusEl = document.getElementById('statusMessage');
-    statusEl.textContent = message;
-    statusEl.className = 'status-message';
-    
-    switch (type) {
-        case 'success':
-            statusEl.classList.add('status-success');
-            break;
-        case 'error':
-            statusEl.classList.add('status-error');
-            break;
-        case 'warning':
-            statusEl.classList.add('status-warning');
-            break;
-        default:
-            statusEl.classList.add('status-info');
-    }
-    
-    statusEl.style.display = 'block';
-    
-    // Автоматическое скрытие
-    const duration = type === 'error' ? 5000 : 3000;
-    setTimeout(() => {
-        statusEl.style.display = 'none';
-    }, duration);
-}
-
-function showTypingIndicator() {
-    document.getElementById('typingIndicator').classList.remove('hidden');
-    document.getElementById('typingIndicator').setAttribute('aria-hidden', 'false');
-    scrollToBottom();
-}
-
-function hideTypingIndicator() {
-    document.getElementById('typingIndicator').classList.add('hidden');
-    document.getElementById('typingIndicator').setAttribute('aria-hidden', 'true');
-}
-
-function scrollToBottom() {
-    const container = document.getElementById('chatMessages');
-    setTimeout(() => {
-        container.scrollTop = container.scrollHeight;
-    }, 100);
-}
-
-// Экранирование HTML для безопасности
 function escapeHtml(unsafe) {
-    if (!unsafe) return '';
     return unsafe
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -708,250 +835,107 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-async function sendMessage() {
-    if (isSending) {
-        showStatus('Подождите, сообщение отправляется...', 'warning');
-        return;
-    }
+function showStatus(message, type = 'info') {
+    const statusDiv = document.getElementById('statusMessage');
+    if (!statusDiv) return;
     
-    // Проверяем наличие API ключа
-    if (!API_CONFIG.key) {
-        showStatus('Ошибка: API ключ не настроен', 'error');
-        return;
-    }
+    statusDiv.textContent = message;
+    statusDiv.className = `status-message status-${type}`;
+    statusDiv.style.display = 'block';
     
-    const messageInput = document.getElementById('messageInput');
-    const sendButton = document.getElementById('sendButton');
-    let message = messageInput.value.trim();
-    
-    // Проверка сообщения
-    if (!message) {
-        showStatus('Введите сообщение', 'error');
-        messageInput.focus();
-        return;
-    }
-    
-    if (message.length > MAX_MESSAGE_LENGTH) {
-        showStatus(`Сообщение слишком длинное (максимум ${MAX_MESSAGE_LENGTH} символов)`, 'error');
-        return;
-    }
-    
-    // Проверка интернет-соединения
-    if (!navigator.onLine) {
-        showStatus('Отсутствует интернет-соединение', 'error');
-        return;
-    }
-    
-    // Блокируем кнопку отправки
-    isSending = true;
-    sendButton.disabled = true;
-    sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    sendButton.setAttribute('aria-label', 'Отправка сообщения...');
-    
-    // Убираем пустой чат, если он есть
-    const emptyChat = document.getElementById('emptyChat');
-    if (emptyChat) {
-        emptyChat.remove();
-    }
-    
-    // Добавляем сообщение пользователя
-    addMessageToChat('user', message);
-    messageInput.value = '';
-    updateCharacterCount();
-    
-    // Сбрасываем состояние кнопки отправки
-    const sendButtonInput = document.getElementById('sendButton');
-    sendButtonInput.disabled = true;
-    
-    // Сохраняем сообщение в текущий чат
-    const currentChat = chats.find(chat => chat.id === currentChatId);
-    if (currentChat) {
-        currentChat.messages.push({ role: 'user', content: message });
-        
-        // Обновляем заголовок чата, если это первое сообщение
-        if (currentChat.messages.length === 1) {
-            const title = message.length > 20 ? message.substring(0, 20) + '...' : message;
-            updateChatTitle(currentChatId, title);
-        }
-        
-        currentChat.updatedAt = new Date().toISOString();
-        saveChats();
-    }
-    
-    // Показываем индикатор набора
-    showTypingIndicator();
-    showStatus('Фруктик думает...', 'info');
-    
+    // Автоматическое скрытие
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, 3000);
+}
+
+function saveChats() {
     try {
-        const response = await callMistralAPI(currentChat);
-        const aiResponse = response.choices[0].message.content;
+        const chatsToSave = chats.map(chat => ({
+            ...chat,
+            // Ограничиваем количество сохраняемых сообщений для экономии места
+            messages: chat.messages.slice(-50)
+        }));
         
-        // Добавляем ответ в историю и чат
-        if (currentChat) {
-            currentChat.messages.push({ role: 'assistant', content: aiResponse });
-            currentChat.updatedAt = new Date().toISOString();
-            saveChats();
-        }
-        
-        hideTypingIndicator();
-        addMessageToChat('assistant', aiResponse);
-        showStatus('Фруктик ответил!', 'success');
-        
+        localStorage.setItem('fruityChat_chats', JSON.stringify(chatsToSave));
+        localStorage.setItem('fruityChat_currentChatId', currentChatId);
     } catch (error) {
-        handleAPIError(error);
-    } finally {
-        // Разблокируем кнопку отправки
-        isSending = false;
-        sendButton.disabled = false;
-        sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
-        sendButton.setAttribute('aria-label', 'Отправить сообщение');
-        messageInput.focus();
+        console.error('Ошибка сохранения чатов:', error);
+        showStatus('Ошибка сохранения чатов', 'error');
     }
 }
 
-async function callMistralAPI(currentChat) {
-    const messagesForAPI = [
-        { 
-            role: 'system', 
-            content: `Ты - Фруктик, дружелюбный помощник для детей младшего школьного возраста. Твоя главная задача - помогать в учебе, соблюдая абсолютно правильную грамматику русского языка.
-
-ОСОБЫЕ ПРАВИЛА:
-1. Всегда отвечай грамотно, без ошибок - ты образец для ребенка
-2. Используй простые, понятные предложения
-3. Объясняй сложные темы доступным языком
-4. Будь терпеливым и поддерживающим
-5. Используй 1-2 эмодзи в ответе для дружелюбия
-6. Не давай готовых ответов на домашние задания, а объясняй как решать
-7. Поощряй любопытство и задавание вопросов
-
-ПРИМЕРЫ ПРАВИЛЬНЫХ ОТВЕТОВ:
-"Привет! Я Фруктик 🍎 Помогу тебе с уроками. Что ты хочешь узнать?"
-"Молодец, что спросил! Давай разберем эту задачу по шагам 🧩"
-"Запомни: 'жи-ши' пиши с буквой 'и'. Это правило русского языка ✏️"` 
-        },
-        ...currentChat.messages.slice(-8) // Берем последние 8 сообщений для контекста
-    ];
-    
-    const response = await fetch(API_CONFIG.url, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${API_CONFIG.key}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model: MODEL,
-            messages: messagesForAPI,
-            max_tokens: 800,
-            temperature: 0.3,
-            top_p: 0.9,
-            stream: false
-        })
-    });
-    
-    if (!response.ok) {
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        try {
-            const errorData = await response.json();
-            errorMessage = errorData.error?.message || errorData.error?.code || errorMessage;
-        } catch (e) {
-            const errorText = await response.text();
-            if (errorText) {
-                errorMessage = errorText;
+function loadChats() {
+    try {
+        const savedChats = localStorage.getItem('fruityChat_chats');
+        const savedCurrentChatId = localStorage.getItem('fruityChat_currentChatId');
+        
+        if (savedChats) {
+            chats = JSON.parse(savedChats);
+            
+            // Восстанавливаем текущий чат
+            if (savedCurrentChatId && chats.some(chat => chat.id === savedCurrentChatId)) {
+                currentChatId = savedCurrentChatId;
+                switchToChat(currentChatId);
+            } else if (chats.length > 0) {
+                currentChatId = chats[0].id;
+                switchToChat(currentChatId);
             }
+        } else {
+            // Создаем первый чат, если нет сохраненных
+            createNewChat();
         }
-        throw new Error(errorMessage);
-    }
-    
-    return await response.json();
-}
-
-function handleAPIError(error) {
-    console.error('API Error:', error);
-    hideTypingIndicator();
-    
-    let userMessage = 'Произошла ошибка при отправке сообщения';
-    
-    if (error.message.includes('401') || error.message.includes('authentication')) {
-        userMessage = 'Ошибка авторизации API. Проверьте настройки ключа.';
-    } else if (error.message.includes('429')) {
-        userMessage = 'Слишком много запросов. Попробуйте позже.';
-    } else if (error.message.includes('network') || error.message.includes('Failed to fetch')) {
-        userMessage = 'Проблемы с сетью. Проверьте подключение к интернету.';
-    } else if (error.message.includes('quota') || error.message.includes('limit')) {
-        userMessage = 'Превышен лимит API. Попробуйте позже.';
-    }
-    
-    showStatus(userMessage, 'error');
-    
-    // Добавляем сообщение об ошибке в чат
-    addMessageToChat('assistant', `Извини, произошла ошибка: ${userMessage}. Попробуй отправить сообщение еще раз. 🍓`);
-}
-
-function addMessageToChat(role, content, animate = true) {
-    const chatMessages = document.getElementById('chatMessages');
-    
-    // Убираем пустой чат, если он есть
-    const emptyChat = document.getElementById('emptyChat');
-    if (emptyChat) {
-        emptyChat.remove();
-    }
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${animate ? 'message-enter' : ''}`;
-    messageDiv.setAttribute('role', role === 'user' ? 'user-message' : 'assistant-message');
-    
-    const isUser = role === 'user';
-    
-    messageDiv.innerHTML = `
-        <div class="flex items-start ${isUser ? 'flex-row-reverse' : ''}">
-            <div class="${isUser ? 'user-avatar blackberry-glow' : 'bot-avatar'}">
-                <span class="avatar-emoji">${isUser ? '🫐' : getRandomFruit()}</span>
-            </div>
-            <div class="chat-bubble ${isUser ? 'user-bubble' : 'bot-bubble'}">
-                <div class="message-content">${escapeHtml(content)}</div>
-                <div class="message-time">${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
-            </div>
-        </div>
-    `;
-    
-    chatMessages.appendChild(messageDiv);
-    scrollToBottom();
-}
-
-function getRandomFruit() {
-    return FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
-}
-
-// Добавляем обработчик для установки PWA
-window.addEventListener('beforeinstallprompt', (e) => {
-    // Предотвращаем автоматическую подсказку
-    e.preventDefault();
-    // Сохраняем событие для использования позже
-    window.deferredPrompt = e;
-    
-    // Показываем свою кнопку установки
-    showInstallPrompt();
-});
-
-function showInstallPrompt() {
-    // Можно добавить свою кнопку установки в интерфейс
-    console.log('PWA можно установить');
-}
-
-// Функция для ручной установки PWA
-function installPWA() {
-    if (window.deferredPrompt) {
-        window.deferredPrompt.prompt();
-        window.deferredPrompt.userChoice.then((choiceResult) => {
-            if (choiceResult.outcome === 'accepted') {
-                console.log('Пользователь принял установку PWA');
-            }
-            window.deferredPrompt = null;
-        });
+        
+        updateChatsList();
+    } catch (error) {
+        console.error('Ошибка загрузки чатов:', error);
+        // Создаем новый чат при ошибке
+        createNewChat();
     }
 }
 
-// Экспорт функций для глобального использования
-window.loadChat = loadChat;
+function createFruitRain() {
+    const fruitRain = document.querySelector('.fruit-rain');
+    if (!fruitRain) return;
+    
+    // Очищаем предыдущие фрукты
+    fruitRain.innerHTML = '';
+    
+    // Создаем 15 случайных фруктов
+    for (let i = 0; i < 15; i++) {
+        setTimeout(() => {
+            const fruit = document.createElement('div');
+            fruit.className = 'fruit';
+            fruit.textContent = FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
+            
+            // Случайная позиция и анимация
+            const left = Math.random() * 100;
+            const duration = 5 + Math.random() * 10;
+            const delay = Math.random() * 5;
+            
+            fruit.style.left = `${left}%`;
+            fruit.style.animationDuration = `${duration}s`;
+            fruit.style.animationDelay = `${delay}s`;
+            
+            fruitRain.appendChild(fruit);
+            
+            // Удаляем фрукт после завершения анимации
+            setTimeout(() => {
+                if (fruit.parentNode === fruitRain) {
+                    fruitRain.removeChild(fruit);
+                }
+            }, (duration + delay) * 1000);
+        }, i * 300);
+    }
+}
+
+// Экспортируем функции для глобального использования
+window.switchToChat = switchToChat;
 window.deleteChat = deleteChat;
-window.installPWA = installPWA;
+window.createNewChat = createNewChat;
+window.sendMessage = sendMessage;
+window.openSidebar = openSidebar;
+window.closeSidebarFunction = closeSidebarFunction;
+
+// Инициализация приложения
+console.log('FruityChat инициализирован! 🫐');
