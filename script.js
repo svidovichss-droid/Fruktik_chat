@@ -45,6 +45,7 @@ async function initializeApp() {
     
     setupEventListeners();
     setupAccessibility();
+    setupEnhancedSwipeGestures();
     
     // Принудительно устанавливаем светлую тему
     document.documentElement.setAttribute('data-theme', 'light');
@@ -141,9 +142,6 @@ function setupEventListeners() {
         messageInput.focus();
     });
     
-    // Обработка свайпов для мобильных устройств
-    setupSwipeGestures();
-    
     // Закрытие боковой панели при нажатии Escape
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
@@ -156,6 +154,147 @@ function setupEventListeners() {
         if (isSending) {
             e.preventDefault();
             e.returnValue = 'Сообщение отправляется. Вы уверены, что хотите уйти?';
+        }
+    });
+}
+
+function setupEnhancedSwipeGestures() {
+    setupSwipeGestures();
+    
+    // Показываем подсказку о свайпе для новых пользователей
+    const isFirstVisit = !localStorage.getItem('fruityChatSeenSwipeHint');
+    if (isFirstVisit && window.innerWidth <= 768) {
+        setTimeout(() => {
+            document.querySelector('.chat-container').classList.add('swipe-hint');
+            setTimeout(() => {
+                document.querySelector('.chat-container').classList.remove('swipe-hint');
+                localStorage.setItem('fruityChatSeenSwipeHint', 'true');
+            }, 4000);
+        }, 2000);
+    }
+}
+
+function setupSwipeGestures() {
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let isSwiping = false;
+    let swipeDistance = 0;
+    const SWIPE_THRESHOLD = 50; // Минимальное расстояние свайпа
+    const SIDEBAR_SWIPE_AREA = 20; // Область активации свайпа от края
+    
+    const chatContainer = document.querySelector('.chat-container');
+    const sidebar = document.getElementById('chatsSidebar');
+    
+    // Обработка начала свайпа
+    chatContainer.addEventListener('touchstart', function(e) {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        currentX = startX;
+        isSwiping = true;
+        swipeDistance = 0;
+        
+        // Сбрасываем трансформации
+        sidebar.style.transform = 'translateX(-100%)';
+        sidebar.style.transition = 'none';
+        sidebar.classList.add('swiping');
+    });
+    
+    // Обработка движения при свайпе
+    chatContainer.addEventListener('touchmove', function(e) {
+        if (!isSwiping) return;
+        
+        currentX = e.touches[0].clientX;
+        const diffX = currentX - startX;
+        const diffY = Math.abs(e.touches[0].clientY - startY);
+        
+        // Проверяем, что это горизонтальный свайп (не вертикальный скролл)
+        if (Math.abs(diffX) > diffY && Math.abs(diffX) > 5) {
+            e.preventDefault();
+            
+            // Свайп только из левого края экрана
+            if (startX <= SIDEBAR_SWIPE_AREA && diffX > 0) {
+                swipeDistance = Math.min(diffX, window.innerWidth * 0.8);
+                
+                // Плавное открытие боковой панели при свайпе
+                const progress = swipeDistance / (window.innerWidth * 0.8);
+                sidebar.style.transform = `translateX(${-100 + (progress * 100)}%)`;
+                sidebar.style.opacity = progress;
+                
+                // Затемнение оверлея
+                const overlay = document.getElementById('sidebarOverlay');
+                overlay.style.display = 'block';
+                overlay.style.opacity = progress * 0.5;
+            }
+        }
+    });
+    
+    // Обработка окончания свайпа
+    chatContainer.addEventListener('touchend', function(e) {
+        if (!isSwiping) return;
+        isSwiping = false;
+        sidebar.classList.remove('swiping');
+        
+        // Восстанавливаем анимацию
+        sidebar.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+        
+        const diffX = currentX - startX;
+        
+        // Если свайп достаточно длинный - открываем панель, иначе закрываем
+        if (diffX > SWIPE_THRESHOLD && startX <= SIDEBAR_SWIPE_AREA) {
+            openSidebar();
+        } else {
+            // Плавное закрытие
+            sidebar.style.transform = 'translateX(-100%)';
+            sidebar.style.opacity = '0';
+            
+            const overlay = document.getElementById('sidebarOverlay');
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                if (!sidebar.classList.contains('active')) {
+                    overlay.style.display = 'none';
+                }
+            }, 300);
+        }
+    });
+    
+    // Закрытие боковой панели свайпом влево
+    sidebar.addEventListener('touchstart', function(e) {
+        if (!sidebar.classList.contains('active')) return;
+        startX = e.touches[0].clientX;
+        isSwiping = true;
+        sidebar.style.transition = 'none';
+        sidebar.classList.add('swiping');
+    });
+    
+    sidebar.addEventListener('touchmove', function(e) {
+        if (!isSwiping || !sidebar.classList.contains('active')) return;
+        
+        const currentX = e.touches[0].clientX;
+        const diffX = currentX - startX;
+        
+        // Свайп влево для закрытия
+        if (diffX < 0) {
+            e.preventDefault();
+            const progress = Math.min(Math.abs(diffX) / 100, 1);
+            sidebar.style.transform = `translateX(${-progress * 100}%)`;
+        }
+    });
+    
+    sidebar.addEventListener('touchend', function(e) {
+        if (!isSwiping) return;
+        isSwiping = false;
+        sidebar.classList.remove('swiping');
+        sidebar.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+        
+        const diffX = currentX - startX;
+        
+        // Если свайп влево достаточно сильный - закрываем
+        if (diffX < -SWIPE_THRESHOLD) {
+            closeSidebarFunction();
+        } else {
+            // Иначе возвращаем панель
+            sidebar.style.transform = 'translateX(0)';
         }
     });
 }
@@ -212,35 +351,6 @@ function handlePaste(e) {
     }
 }
 
-function setupSwipeGestures() {
-    let startX = 0;
-    let startY = 0;
-    let isSwiping = false;
-    
-    document.querySelector('.chat-container').addEventListener('touchstart', function(e) {
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-        isSwiping = true;
-    });
-    
-    document.querySelector('.chat-container').addEventListener('touchmove', function(e) {
-        if (!isSwiping) return;
-        
-        const currentX = e.touches[0].clientX;
-        const diffX = currentX - startX;
-        
-        // Если свайп вправо более 50px, открываем боковую панель
-        if (diffX > 50) {
-            openSidebar();
-            isSwiping = false;
-        }
-    });
-    
-    document.querySelector('.chat-container').addEventListener('touchend', function(e) {
-        isSwiping = false;
-    });
-}
-
 // Функции для работы с боковой панелью
 function openSidebar() {
     const sidebar = document.getElementById('chatsSidebar');
@@ -248,7 +358,13 @@ function openSidebar() {
     
     sidebar.classList.add('active');
     sidebar.setAttribute('aria-hidden', 'false');
-    overlay.classList.add('active');
+    sidebar.style.transform = 'translateX(0)';
+    sidebar.style.opacity = '1';
+    
+    overlay.style.display = 'block';
+    setTimeout(() => {
+        overlay.classList.add('active');
+    }, 10);
     
     // Блокируем скролл основного контента
     document.body.style.overflow = 'hidden';
@@ -262,13 +378,20 @@ function closeSidebarFunction() {
     
     sidebar.classList.remove('active');
     sidebar.setAttribute('aria-hidden', 'true');
+    sidebar.style.transform = 'translateX(-100%)';
+    
     overlay.classList.remove('active');
+    setTimeout(() => {
+        overlay.style.display = 'none';
+    }, 300);
     
     // Разблокируем скролл
     document.body.style.overflow = '';
     
     // Фокус на поле ввода после закрытия
-    document.getElementById('messageInput').focus();
+    setTimeout(() => {
+        document.getElementById('messageInput').focus();
+    }, 350);
 }
 
 // Функции для работы с чатами
