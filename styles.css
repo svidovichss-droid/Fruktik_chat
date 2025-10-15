@@ -38,6 +38,32 @@ body {
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    touch-action: pan-y pinch-zoom;
+}
+
+/* Область активации свайпа */
+.chat-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 20px;
+    height: 100%;
+    z-index: 5;
+    background: transparent;
+}
+
+.chat-container.swipe-hint::before {
+    animation: swipeHint 2s infinite;
+}
+
+@keyframes swipeHint {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    50% {
+        transform: translateX(10px);
+    }
 }
 
 /* Заголовок */
@@ -87,6 +113,7 @@ body {
     padding: 1.5rem;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 
 .messages-container::-webkit-scrollbar {
@@ -416,24 +443,31 @@ body {
     }
 }
 
-/* Боковая панель */
+/* Боковая панель с улучшенными свайпами */
 .chats-sidebar {
     position: fixed;
     top: 0;
-    left: -100%;
+    left: 0;
     width: 90%;
     max-width: 400px;
     height: 100vh;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     z-index: 1000;
-    transition: left 0.3s ease;
     box-shadow: 5px 0 25px rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
+    transform: translateX(-100%);
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
 .chats-sidebar.active {
-    left: 0;
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.chats-sidebar.swiping {
+    transition: none !important;
 }
 
 .sidebar-header {
@@ -557,7 +591,7 @@ body {
     transform: scale(1.1);
 }
 
-/* Оверлей */
+/* Оверлей с улучшениями для свайпов */
 .sidebar-overlay {
     position: fixed;
     top: 0;
@@ -568,13 +602,15 @@ body {
     z-index: 999;
     opacity: 0;
     visibility: hidden;
-    transition: all 0.3s ease;
+    transition: opacity 0.3s ease;
     backdrop-filter: blur(5px);
+    display: none;
 }
 
 .sidebar-overlay.active {
     opacity: 1;
     visibility: visible;
+    display: block;
 }
 
 /* Статусные сообщения */
@@ -629,6 +665,11 @@ body {
         border-radius: 0;
         height: 100vh;
         max-height: -webkit-fill-available;
+        touch-action: pan-y pinch-zoom;
+    }
+    
+    .chat-container::before {
+        width: 30px;
     }
     
     .header {
@@ -637,6 +678,7 @@ body {
     
     .messages-container {
         padding: 1rem;
+        touch-action: pan-y;
     }
     
     .chat-bubble {
