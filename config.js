@@ -3,7 +3,7 @@
     'use strict';
     
     window.API_KEYS = {
-        huggingface: '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'
+        huggingface: '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'
     };
 
     window.APP_CONFIG = {
