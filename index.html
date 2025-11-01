@@ -1,0 +1,197 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Фруктик Чат - дружелюбный помощник для детей в учебе">
+    <meta name="keywords" content="чат, помощник, учеба, дети, фруктик">
+    <title>🍓 Фруктик Чат - Помощник в учёбе</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="application-name" content="Фруктик Чат">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Фруктик Чат">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#ff6b6b">
+    <meta name="msapplication-TileColor" content="#ff6b6b">
+    
+    <!-- Force light theme -->
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    
+    <!-- Styles and Icons -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="icons/icon-32x32.png">
+    <link rel="apple-touch-icon" href="icons/icon-180x180.png">
+</head>
+<body class="min-h-screen flex items-center justify-center p-0 no-select">
+    <!-- Фруктовый дождь -->
+    <div class="fruit-rain" id="fruitRain" aria-hidden="true"></div>
+    
+    <!-- Боковая панель с чатами -->
+    <div class="chats-sidebar" id="chatsSidebar" role="dialog" aria-label="Мои чаты" aria-hidden="true">
+        <div class="sidebar-header">
+            <h2 class="text-xl font-bold">Мои чаты</h2>
+            <button id="closeSidebar" class="text-white text-xl close-sidebar-btn" aria-label="Закрыть боковую панель">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="sidebar-content">
+            <div class="sidebar-info">
+                <p class="text-sm mb-4">Здесь отображаются все ваши чаты с Фруктиком</p>
+                <div class="flex items-center justify-between text-xs">
+                    <span>Всего чатов: <span id="chatsCount">0</span></span>
+                    <button id="clearAllChats" class="text-red-300 hover:text-red-100 transition-colors">
+                        Очистить все
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Кнопка смены API ключа -->
+            <button id="changeApiKey" class="helper-btn" style="width: 100%; justify-content: center; margin-bottom: 1rem;">
+                <i class="fas fa-key"></i> 
+                <span>Настройки API</span>
+            </button>
+            
+            <div id="chatsList" role="list">
+                <!-- Список чатов будет здесь -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Оверлей для закрытия боковой панели -->
+    <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+    
+    <!-- Модальное окно для ввода API ключа -->
+    <div id="apiKeyModal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔑 Настройки API ключа</h2>
+                <button class="modal-close" id="closeApiKeyModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Для работы с Hugging Face API требуется ваш собственный ключ.</p>
+                <p>Получите ключ на <a href="https://huggingface.co/settings/tokens" target="_blank" style="color: #667eea;">huggingface.co/settings/tokens</a></p>
+                <div class="input-group" style="margin-top: 1rem;">
+                    <input type="password" id="apiKeyInput" placeholder="Введите ваш Hugging Face API ключ" class="message-input" style="width: 100%;">
+                </div>
+                <div class="api-key-status" id="apiKeyStatus" style="margin-top: 0.5rem; font-size: 0.875rem;"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="testApiKey" class="helper-btn">Проверить ключ</button>
+                <button id="saveApiKey" class="send-btn">Сохранить ключ</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Чат контейнер -->
+    <div class="chat-container">
+        <!-- Заголовок чата -->
+        <header class="header">
+            <button id="menuButton" class="menu-btn" aria-label="Открыть меню чатов">
+                <i class="fas fa-bars" aria-hidden="true"></i>
+            </button>
+            <div class="text-center flex-1 px-4">
+                <h1 class="text-2xl md:text-3xl font-bold drop-shadow-lg">🍓 Фруктик Чат 🍍</h1>
+                <div class="text-white/90 text-sm mt-1 hidden md:block">Помогаю в учёбе и отвечаю на вопросы!</div>
+                <div class="text-white/90 text-xs mt-1 md:hidden">Помощник в учёбе</div>
+            </div>
+            <button id="newChatButton" class="new-chat-btn" aria-label="Создать новый чат">
+                <i class="fas fa-plus" aria-hidden="true"></i> 
+                <span class="hidden md:inline">Новый чат</span>
+            </button>
+        </header>
+        
+        <!-- Область сообщений -->
+        <main class="messages-container" id="chatMessages" role="log" aria-live="polite">
+            <!-- Сообщения загружаются здесь -->
+        </main>
+        
+        <!-- Индикатор набора -->
+        <div id="typingIndicator" class="typing-indicator hidden" aria-hidden="true">
+            <div class="flex items-start">
+                <div class="bot-avatar">
+                    <div class="avatar-emoji-container">
+                        <span class="avatar-emoji">🍍</span>
+                    </div>
+                </div>
+                <div class="chat-bubble bot-bubble">
+                    <div class="typing-text">Фруктик печатает</div>
+                    <div class="typing-dots">
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Поле ввода -->
+        <footer class="input-container">
+            <div class="input-wrapper">
+                <div class="input-group">
+                    <div class="input-field-container">
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="Напиши сообщение Фруктику... 🍓" 
+                            class="message-input"
+                            aria-label="Сообщение для Фруктика"
+                            maxlength="1000"
+                            rows="1"
+                        ></textarea>
+                        <div class="input-character-count" id="charCount">
+                            0/1000
+                        </div>
+                    </div>
+                    <button 
+                        id="sendButton"
+                        class="send-btn"
+                        aria-label="Отправить сообщение"
+                        disabled
+                    >
+                        <i class="fas fa-paper-plane" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div class="input-helpers">
+                    <button class="helper-btn" id="quickQuestion1" data-question="Помоги с домашним заданием">
+                        <span>📚</span> Домашка
+                    </button>
+                    <button class="helper-btn" id="quickQuestion2" data-question="Объясни тему урока">
+                        <span>🎯</span> Объясни
+                    </button>
+                    <button class="helper-btn" id="quickQuestion3" data-question="Придумай интересный факт">
+                        <span>💡</span> Факт
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Статус сообщение -->
+    <div id="statusMessage" class="status-message" role="status" aria-live="polite"></div>
+
+    <!-- Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => console.log('SW registered'))
+                .catch(error => console.log('SW registration failed'));
+        }
+    </script>
+
+    <!-- Загружаем API конфиг первым -->
+    <script src="api-config.js"></script>
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
